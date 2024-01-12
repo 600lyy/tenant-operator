@@ -47,7 +47,7 @@ type TenantStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// NamespaceCount holds the number of namespaces that belong to this tenant
-	NamespaceCount int32 `json:"namespaceCount"`
+	NamespaceCount int `json:"namespaceCount"`
 
 	// AdminEmail holds the admin email
 	AdminEmail string `json:"adminEmail"`

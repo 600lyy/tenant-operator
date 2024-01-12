@@ -71,7 +71,6 @@ spec:
               namespaceCount:
                 description: NamespaceCount holds the number of namespaces that belong
                   to this tenant
-                format: int32
                 type: integer
             required:
             - adminEmail

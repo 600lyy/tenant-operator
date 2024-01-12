@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multitenancyv1 "github.com/600lyy/tenant-operator/api/v1"
@@ -32,6 +33,7 @@ import (
 
 var (
 	tenantOperatorAnnotation = "tenant-operator"
+	finalizerName            = "tenant.600lyy.io/finalizer"
 )
 
 // TenantReconciler reconciles a Tenant object
@@ -70,22 +72,58 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Loop through each namespace defined in the Tenant Spec
-	// Ensure the namespace exists, and if not, create it
-	// Then ensure RoleBindings for each namespace
-	for _, ns := range tenant.Spec.Namespaces {
-		log.Info("Ensuring namespace", "namespace", ns)
-		if err := r.EnsureNamespace(ctx, &tenant, ns); err != nil {
-			log.Error(err, "unable to ensure namespace", "namespace", ns)
+	// When user attempts to delete a resource, the API server handling the delete
+	// request notices the values in the "finalizer" field and add a metadata.deletionTimestamp
+	// field with time user started the deleteion. This field indicates the deletion of the object
+	// has been requested, but the deletion will not be complete until all the finailzers are removed.
+	// For more details, check Finalizer and Deletion:
+	// - https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/
+	if tenant.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Add a finalizer if not present
+		if !controllerutil.ContainsFinalizer(&tenant, finalizerName) {
+			log.Info("Adding finalizer to the tenant", "Tenant", tenant.Name)
+			tenant.ObjectMeta.Finalizers = append(tenant.ObjectMeta.Finalizers, finalizerName)
+			if err := r.Update(ctx, &tenant); err != nil {
+				log.Error(err, "unable to update Tenant", "tenant", tenant.Name)
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Loop through each namespace defined in the Tenant Spec
+		// Ensure the namespace exists, and if not, create it
+		// Then ensure RoleBindings for each namespace
+		for _, ns := range tenant.Spec.Namespaces {
+			log.Info("Ensuring namespace", "namespace", ns)
+			if err := r.EnsureNamespace(ctx, &tenant, ns); err != nil {
+				log.Error(err, "unable to ensure namespace", "namespace", ns)
+				return ctrl.Result{}, err
+			}
+		}
+
+		tenant.Status.NamespaceCount = len(tenant.Spec.Namespaces)
+		tenant.Status.AdminEmail = tenant.Spec.AdminEmail
+		if err := r.Status().Update(ctx, &tenant); err != nil {
+			log.Error(err, "unable to update Tenant status")
 			return ctrl.Result{}, err
 		}
-	}
 
-	tenant.Status.NamespaceCount = int32(len(tenant.Spec.Namespaces))
-	tenant.Status.AdminEmail = tenant.Spec.AdminEmail
-	if err := r.Status().Update(ctx, &tenant); err != nil {
-		log.Error(err, "unable to update Tenant status")
-		return ctrl.Result{}, err
+		// the object is marked for deletion pening the fianliers
+	} else {
+		if controllerutil.ContainsFinalizer(&tenant, finalizerName) {
+			log.Info("Finalizer found, cleaning up the resource")
+			if err := r.cleanupExternalResources(ctx, &tenant); err != nil {
+				log.Error(err, "Failed to cleanup resources")
+				return ctrl.Result{}, err
+			}
+			log.Info("Resource cleanup succeeded")
+
+			// Remove the finalizer from the Tenant object once the cleanup succeded
+			controllerutil.RemoveFinalizer(&tenant, finalizerName)
+			if err := r.Update(ctx, &tenant); err != nil {
+				log.Error(err, "Unable to remove finalizer and update Tenant", "Tenant", tenant.Name)
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -96,7 +134,7 @@ func (r *TenantReconciler) EnsureNamespace(ctx context.Context, tenant *multiten
 
 	namespace := corev1.Namespace{}
 
-	//Attempt to fetch the namespace, otherwise creat a new one if it doesn't exist
+	//Attempt to fetch the namespace, otherwise creat a new one if not exist
 	err := r.Get(ctx, client.ObjectKey{Name: namespaceName}, &namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -140,6 +178,23 @@ func (r *TenantReconciler) EnsureNamespace(ctx context.Context, tenant *multiten
 		}
 	}
 
+	return nil
+}
+
+func (r *TenantReconciler) cleanupExternalResources(ctx context.Context, tenant *multitenancyv1.Tenant) error {
+	log := log.FromContext(ctx)
+
+	for _, ns := range tenant.Spec.Namespaces {
+		namespace := corev1.Namespace{}
+		namespace.Name = ns
+
+		if err := r.Delete(ctx, &namespace); client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to delete the namespace", "namespace", ns)
+			return err
+		}
+		log.Info("Namespace deleted", "namespace", ns)
+	}
+	log.Info("All resources deleted for tenant", "tenant", tenant.Name)
 	return nil
 }
 

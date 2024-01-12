@@ -10,3 +10,12 @@ metadata:
   name: tenant-sample
 spec:
   # TODO(user): Add fields here
+  adminEmail: admin123@600lyy.com
+  adminGroups:
+    - tenant-sample-admins
+  userGroups:
+    - tenant-sample-users
+    - another-group-users
+  namespaces:
+    - tenant-sample-ns1
+    - tenant-sample-ns2
