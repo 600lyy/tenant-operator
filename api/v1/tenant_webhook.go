@@ -64,18 +64,25 @@ func (r *TenantValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		return nil, fmt.Errorf("unexpected object type, expected Tenant type")
 	}
 
-	tenantlog.Info("validate create for", "tenant", tenant.Name)
+	tenantlog.Info("validate create for", "name", tenant.Name)
 
 	var namespaces corev1.NamespaceList
-	deletedNamespaces := []string{}
 
 	if err := r.List(ctx, &namespaces); err != nil {
 		return nil, fmt.Errorf("Failed to list namespaces: %v", err)
 	}
 
-	for _, ns := range tenant.Spec.Namespaces {
+	ts := tenant.Spec.Namespaces
+	for i, ns := range ts {
 		if namespaceExists(namespaces, ns) {
-			deletedNamespaces = append(deletedNamespaces, ns)
+			tenantlog.Info("Delete the namespace that already exists", "namespace", ns)
+			if l := len(ts); 1 == l {
+				ts = []string{}
+				break
+			} else {
+				ts[i] = ts[l-1]
+				ts = ts[:l-1]
+			}
 		}
 	}
 
@@ -99,10 +106,26 @@ func (r *TenantValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 }
 
 func namespaceExists(namespaces corev1.NamespaceList, namespace string) bool {
-	for _, ns := range namespaces.Items {
-		if ns.Name == namespace {
+	for _, n := range namespaces.Items {
+		if n.Name == namespace {
 			return true
 		}
 	}
 	return false
 }
+
+/* func removeNamespace(namespaces []string, ns string) {
+	tenantlog.Info("Namespace already exists, remove it", "namespace", ns)
+	po := -1
+	for i, n := range namespaces {
+		if n == ns {
+			po = i
+			break
+		}
+	}
+	if po != -1 {
+		l := len(namespaces)
+		namespaces[po] = namespaces[l-1]
+		namespaces = namespaces[:l-2]
+	}
+} */
