@@ -72,17 +72,9 @@ func (r *TenantValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		return nil, fmt.Errorf("Failed to list namespaces: %v", err)
 	}
 
-	ts := tenant.Spec.Namespaces
-	for i, ns := range ts {
+	for _, ns := range tenant.Spec.Namespaces {
 		if namespaceExists(namespaces, ns) {
-			tenantlog.Info("Delete the namespace that already exists", "namespace", ns)
-			if l := len(ts); 1 == l {
-				ts = []string{}
-				break
-			} else {
-				ts[i] = ts[l-1]
-				ts = ts[:l-1]
-			}
+			return nil, fmt.Errorf("namespace %s already exists and is managed by another tenant", ns)
 		}
 	}
 
@@ -91,15 +83,46 @@ func (r *TenantValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *TenantValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	tenantlog.Info("validate update for", "name", "Placeholder")
+	oldTenant, ok := oldObj.(*Tenant)
+	if !ok {
+		return nil, fmt.Errorf("unexpected object type, expected Tenant type")
+	}
 
-	// TODO(user): fill in your validation logic upon object update.
+	newTenant, ok := newObj.(*Tenant)
+	if !ok {
+		return nil, fmt.Errorf("unexpected object type, expected Tenant type")
+	}
+
+	tenantlog.Info("validate update for", "name", oldTenant.Name)
+
+	var namespaces corev1.NamespaceList
+
+	if err := r.List(ctx, &namespaces); err != nil {
+		return nil, fmt.Errorf("Failed to list namespaces: %v", err)
+	}
+
+	for _, ns := range newTenant.Spec.Namespaces {
+		if !func(namespaceList []string, namespace string) bool {
+			for _, ns := range namespaceList {
+				if ns == namespace {
+					return true
+				}
+			}
+			return false
+		}(oldTenant.Spec.Namespaces, ns) {
+			if namespaceExists(namespaces, ns) {
+				return nil, fmt.Errorf("namespace %s already exists and is managed by another tenant", ns)
+			}
+		}
+	}
+
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *TenantValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	tenantlog.Info("validate delete for", "name", "Placeholder")
+
+	// tenantlog.Info("validate delete for", "name", "Placeholder")
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil
@@ -113,19 +136,3 @@ func namespaceExists(namespaces corev1.NamespaceList, namespace string) bool {
 	}
 	return false
 }
-
-/* func removeNamespace(namespaces []string, ns string) {
-	tenantlog.Info("Namespace already exists, remove it", "namespace", ns)
-	po := -1
-	for i, n := range namespaces {
-		if n == ns {
-			po = i
-			break
-		}
-	}
-	if po != -1 {
-		l := len(namespaces)
-		namespaces[po] = namespaces[l-1]
-		namespaces = namespaces[:l-2]
-	}
-} */

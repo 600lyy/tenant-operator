@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	tenantOperatorAnnotation = "tenant-operator"
+	tenantOperatorAnnotation = "tenant.600lyy.io/tenant-operator"
 	finalizerName            = "tenant.600lyy.io/finalizer"
 )
 
@@ -84,7 +84,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// Then ensure RoleBindings for each namespace
 		for _, ns := range tenant.Spec.Namespaces {
 			log.Info("Ensuring namespace", "namespace", ns)
-			if err := r.EnsureNamespace(ctx, &tenant, ns); err != nil {
+			if err := r.ensureNamespace(ctx, &tenant, ns); err != nil {
 				log.Error(err, "unable to ensure namespace", "namespace", ns)
 				return ctrl.Result{}, err
 			}
@@ -119,7 +119,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *TenantReconciler) EnsureNamespace(ctx context.Context, tenant *multitenancyv1.Tenant, namespaceName string) error {
+func (r *TenantReconciler) ensureNamespace(ctx context.Context, tenant *multitenancyv1.Tenant, namespaceName string) error {
 	log := log.FromContext(ctx)
 
 	namespace := corev1.Namespace{}

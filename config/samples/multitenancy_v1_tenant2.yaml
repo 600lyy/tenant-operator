@@ -7,16 +7,14 @@ metadata:
     app.kubernetes.io/part-of: sample-tenant-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: sample-tenant-operator
-  name: tenant-sample
+  name: tenant-sample-2
 spec:
   # TODO(user): Add fields here
-  adminEmail: admin123@600lyy.com
+  adminEmail: foo@600lyy.com
   adminGroups:
     - tenant-sample-admins
   userGroups:
     - tenant-sample-users
     - another-group-users
   namespaces:
-    - tenant-sample-ns1
-    - tenant-sample-ns2
-    - tenant-sample-ns3
+    - tenant-sample-ns4

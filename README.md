@@ -13,6 +13,10 @@
 - Access to a Kubernetes v1.11.3+ cluster.
 
 ### To Deploy on the cluster
+
+```sh
+export IMG=<some-registry>/sample-tenant-operator:tag
+```
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
@@ -32,7 +36,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=<some-registry>/sample-tenant-operator:tag
+make deploy-controller && kubectl delete pods -n tenant-operator-system  --all
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin 
