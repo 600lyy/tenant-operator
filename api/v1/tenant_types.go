@@ -51,6 +51,9 @@ type TenantStatus struct {
 
 	// AdminEmail holds the admin email
 	AdminEmail string `json:"adminEmail"`
+
+	// Namespaces owened by this tenant
+	ObservedNamespaces []string `json:"observednamespaces,omitempty"`
 }
 
 //+kubebuilder:object:root=true

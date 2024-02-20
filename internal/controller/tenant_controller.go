@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -90,7 +91,24 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			}
 		}
 
-		tenant.Status.NamespaceCount = len(tenant.Spec.Namespaces)
+		// List namespaces that are owned by this tenant but not found in the spec
+		// Add all namespaces to the observed status
+		var namespaceList corev1.NamespaceList
+		if err := r.List(ctx, &namespaceList); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to list namespaces: %v", err)
+		}
+
+		// observedNamespaces := tenant.Status.ObservedNamespaces
+
+		for _, ns := range namespaceList.Items {
+			if admin, ok := ns.Annotations["adminEmail"]; ok && admin == tenant.Spec.AdminEmail {
+				if !namespaceExistInList(ns.Name, tenant.Status.ObservedNamespaces) {
+					tenant.Status.ObservedNamespaces = append(tenant.Status.ObservedNamespaces, ns.Name)
+				}
+			}
+		}
+
+		tenant.Status.NamespaceCount = len(tenant.Status.ObservedNamespaces)
 		tenant.Status.AdminEmail = tenant.Spec.AdminEmail
 		if err := r.Status().Update(ctx, &tenant); err != nil {
 			log.Error(err, "unable to update Tenant status")
@@ -174,7 +192,7 @@ func (r *TenantReconciler) ensureNamespace(ctx context.Context, tenant *multiten
 func (r *TenantReconciler) cleanupExternalResources(ctx context.Context, tenant *multitenancyv1.Tenant) error {
 	log := log.FromContext(ctx)
 
-	for _, ns := range tenant.Spec.Namespaces {
+	for _, ns := range tenant.Status.ObservedNamespaces {
 		namespace := corev1.Namespace{}
 		namespace.Name = ns
 
@@ -186,6 +204,15 @@ func (r *TenantReconciler) cleanupExternalResources(ctx context.Context, tenant 
 	}
 	log.Info("All resources deleted for tenant", "tenant", tenant.Name)
 	return nil
+}
+
+func namespaceExistInList(namespace string, namespacesList []string) bool {
+	for _, ns := range namespacesList {
+		if ns == namespace {
+			return true
+		}
+	}
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

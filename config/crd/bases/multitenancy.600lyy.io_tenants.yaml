@@ -72,6 +72,11 @@ spec:
                 description: NamespaceCount holds the number of namespaces that belong
                   to this tenant
                 type: integer
+              observednamespaces:
+                description: Namespaces owened by this tenant
+                items:
+                  type: string
+                type: array
             required:
             - adminEmail
             - namespaceCount

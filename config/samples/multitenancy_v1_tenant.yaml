@@ -19,4 +19,3 @@ spec:
   namespaces:
     - tenant-sample-ns1
     - tenant-sample-ns2
-    - tenant-sample-ns3
