@@ -7,11 +7,13 @@ metadata:
     app.kubernetes.io/part-of: sample-tenant-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: sample-tenant-operator
+  annotations:
+    tenant.600lyy.io/reconcile-interval-in-seconds: "300"
   name: tenant-sample
 spec:
   # TODO(user): Add fields here
   adminEmail: admin123@600lyy.com
-  adminGroups:
+  adminGroups:    
     - tenant-sample-admins
   userGroups:
     - tenant-sample-users

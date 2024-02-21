@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multitenancyv1 "github.com/600lyy/tenant-operator/api/v1"
+	"github.com/600lyy/tenant-operator/pkg/jitter"
 )
 
 var (
@@ -115,15 +116,23 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, err
 		}
 
+		if reconcileReenqueuePeriod, err := jitter.GenerateJitterReenqueuePeriod(&tenant); err != nil {
+			// log.Error(err, "unable to generate the next resync period", "tenant", tenant.Name)
+			return ctrl.Result{}, err
+		} else {
+			log.Info("successully finished reconcile", "tenant", tenant.Name, "time to next reconcile", reconcileReenqueuePeriod)
+			return ctrl.Result{RequeueAfter: reconcileReenqueuePeriod}, nil
+		}
+
 		// the object is marked for deletion pening the fianliers
 	} else {
 		if controllerutil.ContainsFinalizer(&tenant, finalizerName) {
 			log.Info("Finalizer found, cleaning up the resource")
 			if err := r.cleanupExternalResources(ctx, &tenant); err != nil {
-				log.Error(err, "Failed to cleanup resources")
+				log.Error(err, "Failed to cleanup resources", "tenant", tenant.Name)
 				return ctrl.Result{}, err
 			}
-			log.Info("Resource cleanup succeeded")
+			log.Info("Resource cleanup succeeded", "tenant", tenant.Name)
 
 			// Remove the finalizer from the Tenant object once the cleanup succeded
 			controllerutil.RemoveFinalizer(&tenant, finalizerName)

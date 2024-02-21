@@ -64,12 +64,12 @@ func (r *TenantValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		return nil, fmt.Errorf("unexpected object type, expected Tenant type")
 	}
 
-	tenantlog.Info("validate create for", "name", tenant.Name)
+	tenantlog.Info("validate create for", "tenant", tenant.Name)
 
 	var namespaces corev1.NamespaceList
 
 	if err := r.List(ctx, &namespaces); err != nil {
-		return nil, fmt.Errorf("Failed to list namespaces: %v", err)
+		return nil, fmt.Errorf("failed to list namespaces: %v", err)
 	}
 
 	for _, ns := range tenant.Spec.Namespaces {
@@ -93,12 +93,12 @@ func (r *TenantValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		return nil, fmt.Errorf("unexpected object type, expected Tenant type")
 	}
 
-	tenantlog.Info("validate update for", "name", oldTenant.Name)
+	tenantlog.Info("validate update for", "tenant", oldTenant.Name)
 
 	var namespaces corev1.NamespaceList
 
 	if err := r.List(ctx, &namespaces); err != nil {
-		return nil, fmt.Errorf("Failed to list namespaces: %v", err)
+		return nil, fmt.Errorf("failed to list namespaces: %v", err)
 	}
 
 	for _, ns := range newTenant.Spec.Namespaces {
