@@ -34,6 +34,7 @@ import (
 
 	multitenancyv1 "github.com/600lyy/tenant-operator/api/v1"
 	"github.com/600lyy/tenant-operator/internal/controller"
+	"github.com/600lyy/tenant-operator/pkg/lifecyclehandler"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -53,11 +54,27 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var leaseDuration int64
+	var renewDeadline int64
+	var retryPeriod int64
+	var leaderElectionReleaseOnCancel bool
+	var leaseBucket string
+	var leaseFile string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.Int64Var(&leaseDuration, "lease-duration", 15,
+		"LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership. ")
+	flag.Int64Var(&renewDeadline, "renew-deadline", 10,
+		"RenewDeadline is the duration that the acting controlplane will retry refreshing leadership before giving up. ")
+	flag.Int64Var(&retryPeriod, "retry-period", 2,
+		"RetryPeriod is the duration the LeaderElector clients should wait between tries of actions. ")
+	flag.BoolVar(&leaderElectionReleaseOnCancel, "leader-release-on-cancel", true,
+		"LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily when the Manager ends. ")
+	flag.StringVar(&leaseBucket, "lease-storage-bucket", "", "The Google Clous Storage bucket that holds the lease.")
+	flag.StringVar(&leaseFile, "lease-file", "", "The file name of the lease in the storage bucket")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -90,8 +107,8 @@ func main() {
 	}
 
 	if err = (&controller.TenantReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Scheme:           mgr.GetScheme(),
+		Lifecyclehandler: lifecyclehandler.NewLifecycleHandler(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
 		os.Exit(1)

@@ -31,6 +31,7 @@ import (
 
 	multitenancyv1 "github.com/600lyy/tenant-operator/api/v1"
 	"github.com/600lyy/tenant-operator/pkg/jitter"
+	"github.com/600lyy/tenant-operator/pkg/lifecyclehandler"
 )
 
 var (
@@ -40,7 +41,7 @@ var (
 
 // TenantReconciler reconciles a Tenant object
 type TenantReconciler struct {
-	client.Client
+	lifecyclehandler.Lifecyclehandler
 	Scheme *runtime.Scheme
 }
 
@@ -54,7 +55,6 @@ type TenantReconciler struct {
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// TODO(user): your logic here
 	tenant := multitenancyv1.Tenant{}
 
 	log.Info("Reconciling tenant")
@@ -100,12 +100,10 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		// observedNamespaces := tenant.Status.ObservedNamespaces
-
+		tenant.Status.ObservedNamespaces = make([]string, 0)
 		for _, ns := range namespaceList.Items {
 			if admin, ok := ns.Annotations["adminEmail"]; ok && admin == tenant.Spec.AdminEmail {
-				if !namespaceExistInList(ns.Name, tenant.Status.ObservedNamespaces) {
-					tenant.Status.ObservedNamespaces = append(tenant.Status.ObservedNamespaces, ns.Name)
-				}
+				tenant.Status.ObservedNamespaces = append(tenant.Status.ObservedNamespaces, ns.Name)
 			}
 		}
 
@@ -215,14 +213,14 @@ func (r *TenantReconciler) cleanupExternalResources(ctx context.Context, tenant 
 	return nil
 }
 
-func namespaceExistInList(namespace string, namespacesList []string) bool {
+/* func namespaceExistInList(namespace string, namespacesList []string) bool {
 	for _, ns := range namespacesList {
 		if ns == namespace {
 			return true
 		}
 	}
 	return false
-}
+} */
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {

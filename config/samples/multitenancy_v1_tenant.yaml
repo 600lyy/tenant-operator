@@ -20,4 +20,3 @@ spec:
     - another-group-users
   namespaces:
     - tenant-sample-ns1
-    - tenant-sample-ns2
