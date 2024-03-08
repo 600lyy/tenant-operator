@@ -1,10 +1,8 @@
 package leaderelection
 
 import (
-	"context"
 	"fmt"
 
-	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
@@ -30,23 +28,21 @@ type Option struct {
 }
 
 // NewResourceLock creates a new lease lock for use in a leader election loop.
-func NewLeaseLock(ctx context.Context, options Option, clientId string) (resourcelock.Interface, error) {
+func NewLeaseLock(options Option, clientId string) (resourcelock.Interface, error) {
 	if !options.LeaderElection {
 		return nil, nil
 	}
 	if clientId == "" {
 		return nil, fmt.Errorf("unable to create a lock as client Id is empty")
 	}
-	var client *storage.Client
-	var err error
-	if client, err = storage.NewClient(ctx); err != nil {
-		return nil, err
-	}
 
+	/* 	if client, err = storage.NewClient(ctx); err != nil {
+	   		return nil, err
+	   	}
+	*/
 	id := clientId + "_" + (uuid.New().String())
 
 	return &LeaseLock{
-		Client: client,
 		LockConfig: resourcelock.ResourceLockConfig{
 			Identity: id,
 		},

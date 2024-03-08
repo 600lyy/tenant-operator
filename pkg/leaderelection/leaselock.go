@@ -3,11 +3,13 @@ package leaderelection
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"cloud.google.com/go/storage"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/klog/v2"
 )
 
 // LeaseLock implements the resourcelock.Interface
@@ -39,7 +41,6 @@ func (ll *LeaseLock) Get(ctx context.Context) (*resourcelock.LeaderElectionRecor
 }
 
 // Create attempts to create a lease
-// For GCS, we never create a lease from the manager. The lease is created externally
 func (ll *LeaseLock) Create(ctx context.Context, ler resourcelock.LeaderElectionRecord) error {
 	return nil
 }
@@ -63,5 +64,16 @@ func (ll *LeaseLock) Identity() string {
 // Describe is used to convert details on current resource lock
 // into a string
 func (ll *LeaseLock) Describe() string {
-	return ""
+	return fmt.Sprintf("%v/%v", ll.BucketName, ll.LeaseFile)
+}
+
+func (ll *LeaseLock) StartGCSClient(ctx context.Context) error {
+	klog.V(5).Info("Starting up the client to talk with google cloud storage")
+	var client *storage.Client
+	var err error
+	if client, err = storage.NewClient(ctx); err != nil {
+		return err
+	}
+	ll.Client = client
+	return nil
 }
