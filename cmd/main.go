@@ -63,6 +63,7 @@ func main() {
 	var leaderElectionReleaseOnCancel bool
 	var leaseBucket string
 	var leaseFile string
+	var projectId string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -78,6 +79,7 @@ func main() {
 		"LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily when the Manager ends. ")
 	flag.StringVar(&leaseBucket, "lease-storage-bucket", "", "The Google Clous Storage bucket that holds the lease.")
 	flag.StringVar(&leaseFile, "lease-file", "", "The file name of the lease in the storage bucket")
+	flag.StringVar(&projectId, "project-id", "", "Google project ID to which the bucke belong")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -94,8 +96,9 @@ func main() {
 
 	leaseLock, _ := leaderelection.NewLeaseLock(leaderelection.Option{
 		LeaderElection: true,
-		Bucket:         "Declarative-Platform",
-		Lease:          "kcc-lease",
+		ProjectID:      projectId,
+		Bucket:         leaseBucket,
+		Lease:          leaseFile,
 	}, "Cluster-1")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

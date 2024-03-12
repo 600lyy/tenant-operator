@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+	"net/http"
 
 	"cloud.google.com/go/storage"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
@@ -24,24 +25,48 @@ type LeaseLock struct {
 
 // Get returns the lease object from the storage bucket
 func (ll *LeaseLock) Get(ctx context.Context) (*resourcelock.LeaderElectionRecord, []byte, error) {
-	// For testing, fake a lease record without fetching the object from the bucket
-	record := &resourcelock.LeaderElectionRecord{
-		HolderIdentity:       ll.Identity(),
-		LeaseDurationSeconds: 1000.,
-		AcquireTime:          metav1.Time{Time: time.Now()},
-		RenewTime:            metav1.Time{Time: time.Now()},
-		LeaderTransitions:    1,
+	var recordByte []byte
+	var rc *storage.Reader
+	var gcsErr error
+	var record *resourcelock.LeaderElectionRecord
+
+	if rc, gcsErr = ll.Client.Bucket(ll.BucketName).Object(ll.LeaseFile).NewReader(ctx); gcsErr != nil {
+		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
-	recordByte, err := json.Marshal(*record)
-	if err != nil {
-		return nil, nil, err
+	defer rc.Close()
+
+	if _, gcsErr = rc.Read(recordByte); gcsErr != nil {
+		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
 
+	if gcsErr = json.Unmarshal(recordByte, record); gcsErr != nil {
+		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
+	}
 	return record, recordByte, nil
 }
 
 // Create attempts to create a lease
 func (ll *LeaseLock) Create(ctx context.Context, ler resourcelock.LeaderElectionRecord) error {
+	var bkt *storage.BucketHandle
+	var attr *storage.BucketAttrs
+	var err error
+	var len int
+	bkt = ll.Client.Bucket(ll.BucketName)
+	attr, err = bkt.Attrs(ctx)
+	if err != nil {
+		return err
+	}
+	klog.V(5).Info("Succesfully connected to the bucket [%v] in Google storage", attr.Name)
+
+	wc := bkt.Object(ll.LeaseFile).NewWriter(ctx)
+	writeByte, err := json.Marshal(ler)
+	if err != nil {
+		return err
+	}
+	if len, err = wc.Write(writeByte); err != nil {
+		return err
+	}
+	klog.V(5).Info("Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, attr.Name, wc.ObjectAttrs.Name)
 	return nil
 }
 
@@ -76,4 +101,15 @@ func (ll *LeaseLock) StartGCSClient(ctx context.Context) error {
 	}
 	ll.Client = client
 	return nil
+}
+
+func (ll *LeaseLock) convertGcsErrToLeaseErr(gcsErr error) *errors.StatusError {
+	return &errors.StatusError{
+		ErrStatus: metav1.Status{
+			Status:  metav1.StatusFailure,
+			Code:    http.StatusNotFound,
+			Reason:  metav1.StatusReasonNotFound,
+			Message: gcsErr.Error(),
+		},
+	}
 }
