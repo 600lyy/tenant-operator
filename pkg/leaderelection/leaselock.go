@@ -3,11 +3,12 @@ package leaderelection
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"cloud.google.com/go/storage"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
@@ -25,24 +26,30 @@ type LeaseLock struct {
 
 // Get returns the lease object from the storage bucket
 func (ll *LeaseLock) Get(ctx context.Context) (*resourcelock.LeaderElectionRecord, []byte, error) {
-	var recordByte []byte
 	var rc *storage.Reader
 	var gcsErr error
-	var record *resourcelock.LeaderElectionRecord
+	var len int
+	var recordByte = make([]byte, 200)
+	var record = resourcelock.LeaderElectionRecord{}
+
+	if ll.Client == nil {
+		return nil, nil, errors.New("storage client is not empty, initiate it first")
+	}
 
 	if rc, gcsErr = ll.Client.Bucket(ll.BucketName).Object(ll.LeaseFile).NewReader(ctx); gcsErr != nil {
 		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
 	defer rc.Close()
 
-	if _, gcsErr = rc.Read(recordByte); gcsErr != nil {
+	if len, gcsErr = rc.Read(recordByte); gcsErr != nil {
 		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
 
-	if gcsErr = json.Unmarshal(recordByte, record); gcsErr != nil {
+	if gcsErr = json.Unmarshal(recordByte[:len], &record); gcsErr != nil {
 		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
-	return record, recordByte, nil
+	klog.V(5).Infof("The candidate %v reads %d bytes from [%v/%v] in Google storage", ll.LockConfig.Identity, len, ll.BucketName, ll.LeaseFile)
+	return &record, recordByte, nil
 }
 
 // Create attempts to create a lease
@@ -51,12 +58,17 @@ func (ll *LeaseLock) Create(ctx context.Context, ler resourcelock.LeaderElection
 	var attr *storage.BucketAttrs
 	var err error
 	var len int
+
+	if ll.Client == nil {
+		return errors.New("storage client is not empty, initiate it first")
+	}
+
 	bkt = ll.Client.Bucket(ll.BucketName)
 	attr, err = bkt.Attrs(ctx)
 	if err != nil {
 		return err
 	}
-	klog.V(5).Info("Succesfully connected to the bucket [%v] in Google storage", attr.Name)
+	klog.V(5).Infof("Succesfully connected to the bucket [%v] in Google storage", attr.Name)
 
 	wc := bkt.Object(ll.LeaseFile).NewWriter(ctx)
 	writeByte, err := json.Marshal(ler)
@@ -66,13 +78,34 @@ func (ll *LeaseLock) Create(ctx context.Context, ler resourcelock.LeaderElection
 	if len, err = wc.Write(writeByte); err != nil {
 		return err
 	}
-	klog.V(5).Info("Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, attr.Name, wc.ObjectAttrs.Name)
+	if err = wc.Close(); err != nil {
+		return err
+	}
+	klog.V(5).Infof("Create lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, attr.Name, wc.ObjectAttrs.Name)
 	return nil
 }
 
 // Update will update an exising lease
 // For GCS, leader needs to update the time stamps in the lease file
 func (ll *LeaseLock) Update(ctx context.Context, ler resourcelock.LeaderElectionRecord) error {
+	var err error
+	var len int
+
+	if ll.Client == nil {
+		return errors.New("storage client is not empty, initiate it first")
+	}
+	wc := ll.Client.Bucket(ll.BucketName).Object(ll.LeaseFile).NewWriter(ctx)
+	writeByte, err := json.Marshal(ler)
+	if err != nil {
+		return err
+	}
+	if len, err = wc.Write(writeByte); err != nil {
+		return err
+	}
+	if err = wc.Close(); err != nil {
+		return err
+	}
+	klog.V(5).Infof("Update lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, ll.BucketName, wc.ObjectAttrs.Name)
 	return nil
 }
 
@@ -103,13 +136,22 @@ func (ll *LeaseLock) StartGCSClient(ctx context.Context) error {
 	return nil
 }
 
-func (ll *LeaseLock) convertGcsErrToLeaseErr(gcsErr error) *errors.StatusError {
-	return &errors.StatusError{
+func (ll *LeaseLock) convertGcsErrToLeaseErr(gcsErr error) *apierrors.StatusError {
+	var statusReason metav1.StatusReason
+	var statusErr *apierrors.StatusError
+
+	if errors.Is(gcsErr, storage.ErrObjectNotExist) {
+		statusReason = metav1.StatusReasonNotFound
+	} else {
+		statusReason = metav1.StatusReasonInternalError
+	}
+	statusErr = &apierrors.StatusError{
 		ErrStatus: metav1.Status{
 			Status:  metav1.StatusFailure,
 			Code:    http.StatusNotFound,
-			Reason:  metav1.StatusReasonNotFound,
+			Reason:  statusReason,
 			Message: gcsErr.Error(),
 		},
 	}
+	return statusErr
 }

@@ -99,7 +99,7 @@ func main() {
 		ProjectID:      projectId,
 		Bucket:         leaseBucket,
 		Lease:          leaseFile,
-	}, "Cluster-1")
+	}, "Cluster-eu1")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                              scheme,
