@@ -12,6 +12,11 @@
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
+#### Deploying cert-manager
+You can follow the cert-manager documentation to install it.
+
+https://cert-manager.io/docs/installation/
+
 ### To Deploy on the cluster
 
 ```sh

@@ -44,3 +44,9 @@ spec:
         - "--lease-storage-bucket=declarative-platform-001"
         - "--lease-file=kcc-lease"
         - "--project-id=k8s-lab-322711"
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
